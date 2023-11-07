@@ -1,201 +1,252 @@
+/*
+All the main functions with respect to the MeMS are inplemented here
+read the function discription for more details
+
+NOTE: DO NOT CHANGE THE NAME OR SIGNATURE OF FUNCTIONS ALREADY PROVIDED
+you are only allowed to implement the functions 
+you can also make additional helper functions a you wish
+
+REFER DOCUMENTATION FOR MORE DETAILS ON FUNSTIONS AND THEIR FUNCTIONALITY
+*/
+// add other headers as required
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <stdint.h>
+#define MAX_MAPPINGS 10000
 
-#define PAGE_SIZE 4096
+struct AddressMapping {
+    void* virtual_address;
+    void* physical_address;
+};
 
 typedef struct SubChainNode {
-    void* start_address;
     size_t size;
-    struct SubChainNode* prev;
     struct SubChainNode* next;
     int segment_type; // Type of the segment: PROCESS or HOLE
 } SubChainNode;
 
 typedef struct FreeNode {
     struct SubChainNode* sub_chain_head;
-    struct SubChainNode* sub_chain_tail;
-    struct FreeNode* prev;
     struct FreeNode* next;
 } FreeNode;
-
-typedef struct FreeList {
-    FreeNode* head;
-    FreeNode* tail;
-} FreeList;
-
-FreeList free_list;
-void* mems_start_address = NULL;
+/*
+Use this macro where ever you need PAGE_SIZE.
+As PAGESIZE can differ system to system we should have flexibility to modify this 
+macro to make the output of all system same and conduct a fair evaluation. 
+*/
+#define PAGE_SIZE 4096
 size_t total_mapped_pages = 0;
-size_t total_unused_memory = 0;
+struct FreeNode* new_main_node;
 void* base_register = NULL;
+size_t c=0;
+struct AddressMapping address_map[MAX_MAPPINGS];
 
-void mems_init() {
-    free_list.head = NULL;
-    free_list.tail = NULL;
-    mems_start_address = (void*)1000;
-    base_register = mems_start_address;
-    total_mapped_pages = 0;
-    total_unused_memory = 0;
+/*
+Initializes all the required parameters for the MeMS system. The main parameters to be initialized are:
+1. the head of the free list i.e. the pointer that points to the head of the free list
+2. the starting MeMS virtual address from which the heap in our MeMS virtual address space will start.
+3. any other global variable that you want for the MeMS implementation can be initialized here.
+Input Parameter: Nothing
+Returns: Nothing
+*/
+void mems_init(){
+        new_main_node = (FreeNode*)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+        total_mapped_pages = 0;
+        base_register=(void *)0;
+        c++;
+        struct SubChainNode* new_sc_node=(struct SubChainNode *)new_main_node;
+        new_sc_node->size=PAGE_SIZE;
+        new_sc_node->segment_type=1;
+        new_sc_node->next=NULL;
+        new_main_node->sub_chain_head=new_sc_node;
+        new_main_node->next=NULL;
+         for (int i = 0; i < MAX_MAPPINGS; i++) {
+        address_map[i].virtual_address = NULL;
+        address_map[i].physical_address = NULL;
+    }
 }
 
+
+/*
+This function will be called at the end of the MeMS system and its main job is to unmap the 
+allocated memory using the munmap system call.
+Input Parameter: Nothing
+Returns: Nothing
+*/
 void mems_finish() {
-    FreeNode* main_current = free_list.head;
+    struct FreeNode* current_main = new_main_node;
+    struct SubChainNode* sub_chain_node = NULL;
 
-    while (main_current) {
-        FreeNode* main_next = main_current->next;
-
-        SubChainNode* sub_current = main_current->sub_chain_head;
-
-        while (sub_current) {
-            SubChainNode* sub_next = sub_current->next;
-            munmap(sub_current->start_address, sub_current->size);
-            sub_current = sub_next;
-        }
-
-        main_current = main_next;
-    }
-
-    free_list.head = NULL;
-    free_list.tail = NULL;
-    total_mapped_pages = 0;
-    total_unused_memory = 0;
-    base_register = NULL;
-}
-
-void* mems_malloc(size_t size) {
-    if (base_register == NULL) {
-        return NULL;  // MeMS not initialized
-    }
-
-    FreeNode* main_current = free_list.head;
-
-    while (main_current) {
-        SubChainNode* sub_current = main_current->sub_chain_head;
-
-        while (sub_current) {
-            if (total_unused_memory >= size && sub_current->segment_type == 0) {
-                void* allocated_address = base_register;
-                size_t remaining_size = sub_current->size - size;
-
-                if (remaining_size >= PAGE_SIZE) {
-                    // Update the current sub-chain node
-                    sub_current->start_address = base_register;
-                    sub_current->size = remaining_size - PAGE_SIZE;
-                } else {
-                    // Remove the current sub-chain node
-                    if (sub_current == main_current->sub_chain_head) {
-                        main_current->sub_chain_head = sub_current->next;
-                        if (sub_current == main_current->sub_chain_tail) {
-                            main_current->sub_chain_tail = NULL;
-                        }
-                    } else if (sub_current == main_current->sub_chain_tail) {
-                        main_current->sub_chain_tail = sub_current->prev;
-                        main_current->sub_chain_tail->next = NULL;
-                    } else {
-                        sub_current->prev->next = sub_current->next;
-                        sub_current->next->prev = sub_current->prev;
-                    }
-                }
-
-                total_unused_memory -= size;
-                sub_current->segment_type = 1;  // Mark as PROCESS
-                base_register+=size;
-                return base_register;
+    while (current_main != NULL) {
+        sub_chain_node = current_main->sub_chain_head;
+        while (sub_chain_node != NULL) {
+            struct SubChainNode* temp = sub_chain_node;
+            sub_chain_node = sub_chain_node->next;
+            if (temp->segment_type == 0) {
+                // This is a segment we allocated with mmap, so unmap it.
+                munmap(temp, temp->size);
             }
-
-            sub_current = sub_current->next;
         }
-
-        main_current = main_current->next;
+        struct FreeNode* temp_main = current_main;
+        current_main = current_main->next;
+        // Unmap the main chain node.
+        munmap(temp_main, PAGE_SIZE);
     }
-
-    size_t allocation_size = size + PAGE_SIZE - (size % PAGE_SIZE);
-
-    void* allocated_address = mmap(NULL, allocation_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-
-    if (allocated_address == MAP_FAILED) {
-        perror("mmap");
-        return NULL;
-    }
-
-    FreeNode* new_main_node = (FreeNode*)allocated_address;
-    SubChainNode* new_sub_node = (SubChainNode*)(allocated_address + sizeof(FreeNode));
-
-    new_sub_node->start_address = allocated_address;
-    new_sub_node->size = allocation_size;
-    new_sub_node->segment_type = 0; // Initially a HOLE
-    new_sub_node->prev = NULL;
-    new_sub_node->next = NULL;
-
-    new_main_node->sub_chain_head = new_sub_node;
-    new_main_node->sub_chain_tail = new_sub_node;
-    new_main_node->prev = free_list.tail;
-    new_main_node->next = NULL;
-
-    if (free_list.tail) {
-        free_list.tail->next = new_main_node;
-    } else {
-        free_list.head = new_main_node;
-    }
-
-    free_list.tail = new_main_node;
-
-    // Update total_mapped_pages
-    total_mapped_pages += allocation_size / PAGE_SIZE;
-
-    // Update the remaining free memory
-    base_register = (total_mapped_pages-1)*PAGE_SIZE+size;
-    total_unused_memory+=PAGE_SIZE;
-    return base_register;
+    new_main_node = NULL;
 }
 
 
-void mems_print_stats() {
-    printf("Total Mapped Pages: %zu\n", total_mapped_pages);
-    printf("Total Unused Memory: %zu bytes\n", total_unused_memory);
 
-    FreeNode* main_current = free_list.head;
-    int main_segmentNumber = 0;
+/*
+Allocates memory of the specified size by reusing a segment from the free list if 
+a sufficiently large segment is available. 
 
-    while (main_current != NULL) {
-        printf("Main Chain Segment %d:\n", main_segmentNumber);
+Else, uses the mmap system call to allocate more memory on the heap and updates 
+the free list accordingly.
 
-        SubChainNode* sub_current = main_current->sub_chain_head;
-        int sub_segmentNumber = 0;
-
-        while (sub_current != NULL) {
-            printf("Sub-Chain Segment %d: Address: %p, Size: %zu bytes, Type: %s\n", sub_segmentNumber,
-                   sub_current->start_address, sub_current->size, (sub_current->segment_type == 1) ? "PROCESS" : "HOLE");
-
-            sub_current = sub_current->next;
-            sub_segmentNumber++;
+Note that while mapping using mmap do not forget to reuse the unused space from mapping
+by adding it to the free list.
+Parameter: The size of the memory the user program wants
+Returns: MeMS Virtual address (that is created by MeMS)
+*/ 
+void* mems_malloc(size_t size) {
+    struct SubChainNode* ptr;
+    while (new_main_node != NULL) {
+        ptr = new_main_node->sub_chain_head;
+        while (ptr != NULL) {
+            if (ptr && ptr->size >= size && ptr->segment_type == 1) {
+                ptr->segment_type = 0;
+                if (ptr->size > size) {
+                    struct SubChainNode* new = (struct SubChainNode*)((uintptr_t)ptr + size + sizeof(struct SubChainNode));
+                    new->size = ptr->size - size - sizeof(struct SubChainNode);
+                    new->segment_type = 1;
+                    new->next = ptr->next;
+                    ptr->size = size;
+                    ptr->segment_type = 0;
+                    ptr->next = new;
+                }
+                base_register = (void*)((uintptr_t)base_register + size);
+                for (int i = 0; i < MAX_MAPPINGS; i++) {
+                    if (address_map[i].virtual_address == NULL) {
+                        address_map[i].virtual_address = base_register;
+                        address_map[i].physical_address = (uintptr_t)ptr + size + sizeof(struct SubChainNode); // You need to modify this to get the actual physical address
+                        break;
         }
-
-        main_current = main_current->next;
-        main_segmentNumber++;
     }
-}
+                total_mapped_pages++;
+                return base_register;
+            } else if (ptr->size > size + sizeof(struct SubChainNode)) {
+                struct SubChainNode* new = (struct SubChainNode*)((uintptr_t)ptr + size + sizeof(struct SubChainNode));
+                if (new == MAP_FAILED) {
+                    perror("mmap failed");
+                    return NULL;
+                }
+                new->size = ptr->size - size - sizeof(struct SubChainNode);
+                new->segment_type = 1;
+                new->next = ptr->next;
+                ptr->size = size;
+                ptr->segment_type = 0;
+                ptr->next = new;
+                base_register = (void*)((uintptr_t)base_register + size + sizeof(struct SubChainNode));
+                for (int i = 0; i < MAX_MAPPINGS; i++) {
+                    if (address_map[i].virtual_address == NULL) {
+                        address_map[i].virtual_address = base_register;
+                        address_map[i].physical_address = (uintptr_t)ptr + size + sizeof(struct SubChainNode); // You need to modify this to get the actual physical address
+                        break;
+        }
+    }
+                total_mapped_pages++;
+                return base_register;
+            } else {
+                ptr = ptr->next;
+            }
+        }
+        new_main_node = new_main_node->next;
+    }
 
-void* mems_get(void* v_ptr) {
-    if (!v_ptr) {
+    struct FreeNode* new_main = (FreeNode*)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (new_main == MAP_FAILED) {
+        perror("mmap failed");
         return NULL;
     }
+    struct SubChainNode* new_sc_node1 = (SubChainNode*)new_main;
+    new_sc_node1->size = PAGE_SIZE;
+    new_sc_node1->segment_type = 1;
+    new_sc_node1->next = NULL;
+    new_main->sub_chain_head = new_sc_node1;
+    new_main->next = NULL;
+    new_main_node->next = new_main;
+    base_register = (void*)((uintptr_t)(c * PAGE_SIZE));
+    for (int i = 0; i < MAX_MAPPINGS; i++) {
+                    if (address_map[i].virtual_address == NULL) {
+                        address_map[i].virtual_address = base_register;
+                        address_map[i].physical_address = new_main; // You need to modify this to get the actual physical address
+                        break;
+        }
+    }
+    c++;
+    return mems_malloc(size);
+}
 
-    uintptr_t virtual_address = (uintptr_t)v_ptr;
-    uintptr_t start_address = (uintptr_t)mems_start_address;
+/*
+this function print the stats of the MeMS system like
+1. How many pages are utilised by using the mems_malloc
+2. how much memory is unused i.e. the memory that is in freelist and is not used.
+3. It also prints details about each node in the main chain and each segment (PROCESS or HOLE) in the sub-chain.
+Parameter: Nothing
+Returns: Nothing but should print the necessary information on STDOUT
+*/
+void mems_print_stats(){
+    struct FreeNode* current_main = new_main_node;
+    int main_chain_length = 0;
+    int* sub_chain_lengths = NULL;
+    int pages_used = 0;
+    int space_unused = 0;
 
-    if (virtual_address >= start_address && virtual_address < (start_address + total_mapped_pages * PAGE_SIZE)) {
-        uintptr_t offset = virtual_address - start_address;
-        uintptr_t physical_address = (uintptr_t)sbrk(0) + offset;
-        return (void *)physical_address;
+    while (current_main != NULL) {
+        main_chain_length++;
+        struct SubChainNode* sub_chain_node = current_main->sub_chain_head;
+        while (sub_chain_node != NULL) {
+            if (sub_chain_node->segment_type == 0) {
+                pages_used += sub_chain_node->size / PAGE_SIZE;
+            } else {
+                space_unused += sub_chain_node->size;
+            }
+            sub_chain_node = sub_chain_node->next;
+        }
+        current_main = current_main->next;
     }
 
+    printf("MeMS SYSTEM STATS\n");
+    printf("MAIN Chain Length: %d\n", main_chain_length);
+    printf("Pages used: %d\n", pages_used);
+    printf("Space unused: %d\n", space_unused);
+}
+
+
+/*
+Returns the MeMS physical address mapped to ptr ( ptr is MeMS virtual address).
+Parameter: MeMS Virtual address (that is created by MeMS)
+Returns: MeMS physical address mapped to the passed ptr (MeMS virtual address).
+*/
+void *mems_get(void*v_ptr){
+        for (int i = 0; i < MAX_MAPPINGS; i++) {
+        if (address_map[i].virtual_address == v_ptr) {
+            return address_map[i].physical_address;
+        }
+    }
+    
     return NULL;
 }
 
+
+/*
+this function free up the memory pointed by our virtual_address and add it to the free list
+Parameter: MeMS Virtual address (that is created by MeMS) 
+Returns: nothing
+*/
 void mems_free(void* v_ptr) {
     uintptr_t virtual_address = (uintptr_t)v_ptr;
 
@@ -212,21 +263,25 @@ void mems_free(void* v_ptr) {
                 // Mark the segment as a HOLE
                 sub_current->segment_type = 0;
 
-                                // Add this segment to the unused memory
+                // Add this segment to the unused memory
                 total_unused_memory += sub_current->size;
 
-                // Merge consecutive HOLE segments
+                // Merge consecutive HOLE segments (Next segment)
                 SubChainNode* next_segment = sub_current->next;
                 if (next_segment && next_segment->segment_type == 0) {
                     sub_current->size += next_segment->size;
                     sub_current->next = next_segment->next;
                 }
 
+                // Merge consecutive HOLE segments (Previous segment)
                 SubChainNode* prev_segment = sub_current->prev;
                 if (prev_segment && prev_segment->segment_type == 0) {
                     prev_segment->size += sub_current->size;
                     prev_segment->next = sub_current->next;
                 }
+
+                // You may want to implement additional logic to manage the free list here.
+
                 return;
             }
 
