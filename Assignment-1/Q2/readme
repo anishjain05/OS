@@ -1,0 +1,5 @@
+We've developed a primary script titled "Q2.c" responsible for initializing and executing the custom shell. As per the assignment requirements, we've incorporated three distinct commands. The "word" command functions as an internal command, written into the "Q2.c" main file. Conversely, the "dir" and "date" commands operate as external commands, have been written in separate code files named "dir.c" and "date.c" respectively.
+
+In the main file “Q2.c”, we initiate an infinite loop that repeatedly takes input from a user (like a shell) and executes the custom commands. This loop runs until the user enters “exit”. The program takes and stores the input in the form of an array of words. The first word is checked and the specefic command is called to be executed. For the word command, a function internally present in the main file is called. For dir and date commands, we fork and create a child process. In the child process, we then use execvp() to execute the respective c files of the commands. If the input is unrecognizable (not among the custom commands), an error is returned.
+
+We use makefile to compile 3 files - “Q2.c” “dir.c” “date.c” - and run - “./Q2”

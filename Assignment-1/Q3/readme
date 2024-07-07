@@ -1,0 +1,8 @@
+We have created a bash script which reads from a text file input.txt and prints its output in a textfile named output.txt. 
+We are passing three arguments , two integers x and y and an operation op from the textfile and while loop iterates till it encounters an empty line.
+Then we have used conditional statements and a variable result in which we will store the result of the operation which will later be echoed into the output file.
+If the operation is "xor", the script uses bitwise XOR (^) to calculate the result of x XOR y.If the operation is "product", 
+the script calculates the product of x and y using the arithmetic multiplication operator *.If the operation is "compare", the script compares the values of x and y. 
+If x is greater than y, it sets the result to x, otherwise to y.If the operation is not recognized (neither "xor", "product", nor "compare"), 
+the script echoes an error message indicating the unknown operation and continues to the next iteration of the loop using the continue statement.We have used fi to indicate the end of that particular “if” block.
+The done statement marks the end of the loop. The < input.txt redirects the standard input of the loop to read lines from the input.txt file.
