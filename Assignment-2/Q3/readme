@@ -1,0 +1,4 @@
+We have installed the necessary linux headers using the pacman -S linux-headers command.
+Then we have included the required modules needed for the code.We have made a count function where we have iterated through a for loop in each task and checked its status using task->__status and incremented the count and then returned it.
+The __init function is used for loading the module and prints 2 statements.
+the __exit function is used for unloading the module and prints 1 statement.

@@ -1,0 +1,28 @@
+In the main.c file, we first import the essential libraries including <math.h> and <time.h>
+
+
+Under the main function, after declaring the required variables :-
+
+We use fork 3 times to create 3 children of the parent process.
+After each fork, we define the scheduling policy and priority with which it should run the counting process. We note the time using time.h library before and right after the counting process is finished. The difference between the start and end time is the time taken by the process to complete the counting. This time is noted down in a text file "execution_times.txt" (unit is seconds).
+
+The first fork initiates process with FIFO scheduling policy
+The second fork initiates process with RR scheduling policy
+The third fork initiates process with OTHER scheduling policy
+
+The counting process is executed by the "count.c" file.
+
+We've also included a python file "plot.py" which reads the execution times from the text file and plots the time as a histogram using the matplotlib library.
+This plot is saved as an image named "execution_time_comparison.png".
+
+A makefile has also been included that does the 3 following steps :-
+(1) Compiles "count.c" and names the executable "count". 
+(2) Compiles "main.c" and names the executable "main".
+(3) Runs the executable file "main".
+
+Run - "make all"
+To generate the plot, run - "python3 plot.py"
+
+
+
+
