@@ -1,0 +1,5 @@
+Deadlocks in the Dining Philosophers problem can occur due to the potential circular waiting condition among philosophers. Each philosopher needs two forks and a bowl to eat. If philosophers pick up one fork and wait for the other, and at the same time, each philosopher is holding a bowl, it can result in a circular dependency, leading to a deadlock.
+
+The provided solution uses mutexes, conditional variables, and a protocol to avoid deadlocks. Philosophers acquire the left and right forks along with a bowl, ensuring that they have all necessary resources before starting to eat. If any of the resources are unavailable, the philosopher releases any acquired resources and retries after a delay, preventing a potential circular waiting condition and avoiding deadlocks.
+
+According to the output observed it was very random but ultimately each philosopher nearly got equal opportunity.
